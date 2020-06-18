@@ -4,9 +4,9 @@ from collections import defaultdict, deque
 import pickle
 
 class VirtualIndexer:
-    def __init__(self, formerIndex=0, maxLength=3, return_per_trigger = False):
+    def __init__(self, currentIndex=0, maxLength=3, return_per_trigger = False):
         
-        self.formerIndex = formerIndex
+        self.currentIndex = currentIndex
         self.maxLength = maxLength 
         
         self.masterDict = defaultdict(list)
@@ -22,7 +22,7 @@ class VirtualIndexer:
         #Transition to State 2
         if key and self.masterDict.get('State') == 1:
 
-            self.formerIndex = 0
+            self.currentIndex = 0
             
             self.masterDict.pop('State')                                        ## Remove State key
             self.masterDict = {int(k):v for k,v in self.masterDict.items()}     ## Cast all keys to int for processing 
@@ -77,24 +77,24 @@ class VirtualIndexer:
                         
             ## Set the State to 3
             self.masterDict['State'] = 3 
-            ## Reset the formerIndex
-            self.formerIndex = 0
+            ## Reset the currentIndex
+            self.currentIndex = 0
         
         #In State 3    
         elif key and self.masterDict.get('State') == 3:
             ## State 3 is steady state and only reset former index on StateChange
-            self.formerIndex = 0
+            self.currentIndex = 0
 
         #System receive result  
-        self.deq = self.masterDict.get(str(self.formerIndex))
+        self.deq = self.masterDict.get(str(self.currentIndex))
 
         if self.deq == None:
             self.deq = deque(maxlen=self.maxLength)
         #Add result into deque
         self.deq.append(val)
         #Update deque into master dict
-        self.masterDict[str(self.formerIndex)] = self.deq
-        self.formerIndex += 1
+        self.masterDict[str(self.currentIndex)] = self.deq
+        self.currentIndex += 1
         
         
         if self.return_per_trigger:
@@ -132,8 +132,8 @@ class VirtualIndexer:
     def getMaxLength(self):
         return self.maxLength
         
-    def getFormerIndex(self):
-        return self.formerIndex
+    def getcurrentIndex(self):
+        return self.currentIndex
         
     def getState(self):
         return self.masterDict.get('State')
@@ -147,4 +147,4 @@ class VirtualIndexer:
         
         
         
-        
+    
