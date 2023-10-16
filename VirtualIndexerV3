@@ -1,0 +1,175 @@
+import numpy as np
+import datetime
+import os
+import pickle
+from collections import defaultdict, deque
+
+class VirtualIndexerv3():
+    def __init__(self, maxLength=3, return_per_trigger = False, maxIndex = 999999):
+        
+        self.currentIndex = 0
+        self.previousTriggerIndex = 0
+        self.resetIndex = 0
+        self.maxLength = maxLength  
+        self.maxIndex = maxIndex
+        self.currState = 1
+
+        self.b_masterDict = defaultdict(list)
+
+        self.masterDict = defaultdict(list)
+        
+        self.resetIndex_history = []
+
+        self.deq = deque(maxlen=self.maxLength)
+        
+        self.return_per_trigger = return_per_trigger
+        
+    def trigger(self,data):
+        key, val = data
+
+        ## Update state
+        if key:
+            # print('Anchor reset')
+            ## Incremeent state variable
+            self.currState = min(self.currState + 1,3)
+            ## Logg Past resets
+            self.resetIndex = self.previousTriggerIndex
+            self.resetIndex_history.append(self.resetIndex)
+            ## Reset the current index
+            self.currentIndex = 0
+
+        ## True index for logging
+        if self.currState == 1:
+            true_index_key = f'b{self.currentIndex}'
+            possible_other_indexes =  []
+
+        elif self.currState == 2:
+            true_index_key = f'{self.currentIndex}' 
+            possible_other_indexes =  [f'b{self.currentIndex + (self.resetIndex_history[0]+1)}']
+
+        elif self.currState == 3:
+            true_index_key = f'{self.currentIndex}' 
+            possible_other_indexes =  [f'b{self.currentIndex + (self.resetIndex_history[0]+1) - (self.resetIndex+1)}' ,f'{self.currentIndex - (self.resetIndex+1)}', f'{self.currentIndex + (self.resetIndex+1)}']
+            
+        #System receive result  
+        current_deq = self.masterDict.get(true_index_key)
+        if current_deq == None:
+            current_deq = deque(maxlen=self.maxLength)
+
+        ## Handle Past Data append
+        for past_index_key in possible_other_indexes:
+            past_deq = self.masterDict.get(past_index_key) 
+            if past_deq != None:
+                for _ in range(len(past_deq)):
+                    past_deq_item = past_deq.popleft()
+                    current_deq.append(past_deq_item)
+
+        ## Append the current item
+        #Add result into deque
+        current_deq.append(val)
+
+        #Update deque into master dict
+        self.masterDict[true_index_key] = current_deq
+
+        ## Update index
+        self.previousTriggerIndex = self.currentIndex
+        self.currentIndex += 1
+        
+        # print(self.previousTriggerIndex, self.currentIndex, self.currState)
+
+        if self.return_per_trigger:
+            return self.masterDict
+        else:
+            return None
+    
+    def resetOnly(self,key):
+        ## Update state
+        if key:
+            # print('Anchor reset')
+            ## Incremeent state variable
+            self.currState = min(self.currState + 1,3)
+            ## Logg Past resets
+            self.resetIndex = self.previousTriggerIndex
+            self.resetIndex_history.append(self.resetIndex)
+            ## Reset the current index
+            self.currentIndex = 0
+
+        return None
+
+
+    def exportData(self,path):
+        
+        with open(path, 'wb') as handle:
+            pickle.dump(self.masterDict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            
+    def loadData(self,path):
+        
+        with open(path, 'rb') as handle:
+            self.masterDict = pickle.load(handle)
+        
+    def setMaxLength(self,length):
+        self.maxLength = length
+        
+        ## Iterate through all existing data in master dict to update deque maxLength
+
+        ## Iterate through dict items and increase deque maxlen
+        for key,dq in self.masterDict.items():
+            dq_new = deque(dq,maxlen=length)
+            self.masterDict[key] = dq_new
+        
+    def getCurrentDict(self):
+        return self.masterDict
+    
+    def getAllIndexes(self):
+        keys = list(self.masterDict.keys())
+        
+        return keys
+    
+    def getMaxIndex(self):
+        keys = [int(key) for key in self.getAllIndexes()]
+        if len(keys) > 0:
+            return str(max(keys))
+        else:
+            return None
+
+    def getItemAtIndex(self,key):
+        return self.masterDict.get(key)
+
+    def getMaxLength(self):
+        return self.maxLength
+        
+    def getCurrentIndex(self):
+        return self.currentIndex
+    
+    def getResetIndex(self):
+        return self.resetIndex
+
+    def getPreviousTriggerIndex(self):
+        return self.previousTriggerIndex
+        
+    def getState(self):
+        return self.currState
+
+    def getResetHistory(self):
+        return self.resetIndex_history
+
+    def getPastPossibleIndices(self):
+        ## True index for logging
+        if self.currState == 1:
+            possible_other_indexes =  []
+
+        elif self.currState == 2:
+            possible_other_indexes =  [f'b{self.currentIndex + (self.resetIndex_history[0]+1)}']
+
+        elif self.currState == 3:
+            possible_other_indexes =  [f'b{self.currentIndex + (self.resetIndex_history[0]+1) - (self.resetIndex+1)}' ,f'{self.currentIndex - (self.resetIndex+1)}', f'{self.currentIndex + (self.resetIndex+1)}']
+        
+        return possible_other_indexes
+    
+    def help(self):
+        
+        print('This function create a virtual index for incoming (trigger,result) value pairs\n')
+        print('The indexing works on an anchor(1) basis where the anchor(1) in the trigger input acts as the reference.\n ')
+        print('The indexes and the respective number(maxLength) of results will be stored in a dictionary key-value pair.\n')
+        print('The dictionary can be exported using the exportData function and loaded using loadData function.\n')
+ 
